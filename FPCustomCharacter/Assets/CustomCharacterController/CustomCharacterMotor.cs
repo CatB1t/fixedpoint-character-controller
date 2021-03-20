@@ -34,7 +34,7 @@ public class CustomCharacterMotor : MonoBehaviour
     #endregion
 
     #region Player Flags
-    bool m_isGrounded = false;
+    private bool m_isGrounded = false;
     #endregion
 
     #region Internal Transform
@@ -80,7 +80,7 @@ public class CustomCharacterMotor : MonoBehaviour
         m_checkDistanceGround = ((m_capsuleHeight / 2f) - m_capusleRadius) + m_skinWidth; 
     }
 
-    void Update() // TODO / Used for debugging
+    void Update() // TODO // Used for debugging
     {
         if (EditorApplication.isPlaying)
         {
@@ -111,7 +111,7 @@ public class CustomCharacterMotor : MonoBehaviour
         bool sphereHit = Physics.SphereCast(startPosition, m_capusleRadius, Vector3.down, out RaycastHit sphereCastHit , m_checkDistanceGround, m_groundMask);
         m_isGrounded = sphereHit ? true : false; // Update is grounded
 
-        if(sphereHit) // TODO check if ground isn't slippery
+        if(sphereHit) // TODO check for max slope angle
         {
             // TODO set ground vector to normalize to
             m_internalGroundNormal = new fp3((fp) sphereCastHit.normal.x, (fp) sphereCastHit.normal.y, (fp) sphereCastHit.normal.z);
