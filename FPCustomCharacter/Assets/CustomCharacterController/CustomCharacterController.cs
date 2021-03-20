@@ -22,6 +22,6 @@ public class CustomCharacterController : MonoBehaviour
     private void ReadInput(out Vector2 movement, out float rotation)
     {
         movement = m_inputActions.Player.Movement.ReadValue<Vector2>();
-        rotation = m_inputActions.Player.RotationDelta.ReadValue<float>();
+        rotation = m_inputActions.Player.HorizontalRotation.ReadValue<float>();
     }
 }
