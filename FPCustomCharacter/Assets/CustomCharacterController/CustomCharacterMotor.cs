@@ -62,7 +62,7 @@ public class CustomCharacterMotor : MonoBehaviour
 
     void Awake()
     {
-        fp3 tmpPlayerPosition = new fp3((fp) transform.localPosition.x, (fp) transform.localPosition.y, (fp) transform.localPosition.z); 
+        fp3 tmpPlayerPosition = new fp3( (fp) transform.localPosition.x, (fp) transform.localPosition.y, (fp) transform.localPosition.z); 
         m_internalPosition = tmpPlayerPosition;
         ApplyTransform();
     }
@@ -149,7 +149,7 @@ public class CustomCharacterMotor : MonoBehaviour
     public void Move(Vector2 direction)
     {
 
-        if(direction.sqrMagnitude <= 0) 
+        if(direction.sqrMagnitude <= Mathf.Epsilon) // Zero Input
             return;
 
         // Check if we can move in the direction, if not. return
@@ -201,13 +201,12 @@ public class CustomCharacterMotor : MonoBehaviour
 
         fp3 normalizedVector = fpmath.normalize(vector);
         fp dot = fpmath.dot(normalizedVector, planeNormal);
-        if(dot == 0) return normalizedVector;
+        if(dot == 0) return normalizedVector; // If orthogonal
 
-        fp mangtidueOfNormal = fpmath.sqrt( ( (planeNormal.x * planeNormal.x) + (planeNormal.y * planeNormal.y) + (planeNormal.z * planeNormal.z) ) );
-        fp3 projection = ((dot) / mangtidueOfNormal * mangtidueOfNormal) * planeNormal;
-        fp3 actualProjection = normalizedVector - projection;
+        fp normalMagnitude = fpmath.sqrt( ( (planeNormal.x * planeNormal.x) + (planeNormal.y * planeNormal.y) + (planeNormal.z * planeNormal.z) ) );
+        fp3 projection = ((dot) / normalMagnitude * normalMagnitude) * planeNormal;
 
-        return actualProjection;
+        return normalizedVector - projection;
     }
     #endregion
 }
