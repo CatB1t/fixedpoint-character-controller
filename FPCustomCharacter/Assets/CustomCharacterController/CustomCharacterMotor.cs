@@ -22,8 +22,9 @@ public class CustomCharacterMotor : MonoBehaviour
     [Header("Collider Properties")]
     [SerializeField] private float m_capusleRadius = 0.5f;
     [SerializeField] private float m_capsuleHeight = 2;
-    [SerializeField] private float m_skinWidth = 0.1f;
+    [SerializeField] private float m_skinWidth = 0.08f;
     [SerializeField] private LayerMask m_groundMask;
+    [SerializeField] private LayerMask m_colliderObjectsMask;
     #endregion
 
     #region Cached Variables
@@ -48,10 +49,6 @@ public class CustomCharacterMotor : MonoBehaviour
     private fp3 m_internalRightVector = new fp3(0,0,0);
     #endregion
 
-    /// <summary>
-    /// Called when the script is loaded or a value is changed in the
-    /// inspector (Called in the editor only).
-    /// </summary>
     void OnValidate()
     {
         CapsuleCollider collider = GetComponent<CapsuleCollider>();
@@ -77,7 +74,7 @@ public class CustomCharacterMotor : MonoBehaviour
         m_fpFixedDeltaTime = (fp) Time.fixedDeltaTime;
         m_fpWalkSpeed = (fp) m_playerWalkSpeed;
         m_fpRotationSpeed = (fp) m_playerRotationSpeed;
-        m_checkDistanceGround = ((m_capsuleHeight / 2f) - m_capusleRadius) + m_skinWidth; 
+        m_checkDistanceGround = ((m_capsuleHeight / 2f) - (m_capusleRadius / 2)) + m_skinWidth; 
     }
 
     void Update() // TODO // Used for debugging
@@ -103,15 +100,10 @@ public class CustomCharacterMotor : MonoBehaviour
 
     void CheckForGround()
     {
-        // SphereCollider from the bottom of the capsule
-        Vector3 startPosition = transform.localPosition;
-        Vector3 endPosition = startPosition + Vector3.down * (m_capsuleHeight / 2f);
-        Ray ray = new Ray(startPosition, endPosition);
-
-        bool sphereHit = Physics.SphereCast(startPosition, m_capusleRadius, Vector3.down, out RaycastHit sphereCastHit , m_checkDistanceGround, m_groundMask);
-        m_isGrounded = sphereHit ? true : false; // Update is grounded
-
-        if(sphereHit) // TODO check for max slope angle
+        // Using half radius so the player can not stand on edges
+        bool hitFound = Physics.SphereCast(transform.localPosition, m_capusleRadius / 2, Vector3.down, out RaycastHit sphereCastHit , m_checkDistanceGround, m_groundMask);
+        m_isGrounded = hitFound; 
+        if(hitFound) // TODO check for max slope angle
         {
             // TODO set ground vector to normalize to
             m_internalGroundNormal = new fp3((fp) sphereCastHit.normal.x, (fp) sphereCastHit.normal.y, (fp) sphereCastHit.normal.z);
@@ -141,6 +133,16 @@ public class CustomCharacterMotor : MonoBehaviour
         transform.localPosition = new Vector3((float) m_internalPosition.x, (float) m_internalPosition.y, (float) m_internalPosition.z);
     }
 
+    private bool CanMoveInDirection(Vector3 direction, float distance) 
+    {
+        float circleOffset = (m_capsuleHeight / 2) - m_capusleRadius;
+        Vector3 topPoint = transform.position + Vector3.up * circleOffset;
+        Vector3 bottomPoint = transform.position - Vector3.up * circleOffset;
+        // TODO, cast at the edge of the capsule instead of the center
+        bool hitFound = Physics.CapsuleCast(topPoint, bottomPoint, m_capusleRadius, direction, out RaycastHit hitInfo, distance, m_colliderObjectsMask);
+        return !hitFound;
+    }
+
     #region Api
     /// <summary>
     /// Moves relative to the player's transform
@@ -153,6 +155,10 @@ public class CustomCharacterMotor : MonoBehaviour
             return;
 
         // Check if we can move in the direction, if not. return
+        Vector3 desiredNextPositionRelative = (direction.y * transform.forward) + (direction.x * transform.right);
+        float distanceOfMovement = Time.fixedDeltaTime * m_playerWalkSpeed * (m_capusleRadius * 2); // TODO move out speed to Controller
+        if(!CanMoveInDirection(desiredNextPositionRelative, distanceOfMovement))
+            return;
         
         fp2 fixedDirection = new fp2((fp) direction.x, (fp) direction.y );
         //fpmath.normalize(fixedDirection);

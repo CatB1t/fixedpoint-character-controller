@@ -134,7 +134,7 @@ GameObject:
   - component: {fileID: 187681957}
   - component: {fileID: 187681960}
   - component: {fileID: 187681959}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: Face
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -347,7 +347,7 @@ GameObject:
   - component: {fileID: 783706177}
   - component: {fileID: 783706176}
   - component: {fileID: 783706175}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Box (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -441,7 +441,7 @@ GameObject:
   - component: {fileID: 825350575}
   - component: {fileID: 825350578}
   - component: {fileID: 825350577}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: Mesh
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -619,7 +619,7 @@ GameObject:
   - component: {fileID: 1193676774}
   - component: {fileID: 1193676775}
   - component: {fileID: 1193676773}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: Player
   m_TagString: Player
   m_Icon: {fileID: 0}
@@ -634,7 +634,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1193676771}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 2, z: 1.5}
+  m_LocalPosition: {x: 0, y: 3.312, z: 1.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children:
   - {fileID: 825350575}
@@ -656,14 +656,17 @@ MonoBehaviour:
   InternalAngleRead: 0
   InternalPositionRead: {x: 0, y: 0, z: 0}
   m_gravityForce: -9.81
-  m_playerWalkSpeed: 2
+  m_playerWalkSpeed: 5
   m_playerRotationSpeed: 30
   m_capusleRadius: 0.5
   m_capsuleHeight: 2
-  m_skinWidth: 0.1
+  m_skinWidth: 0.08
   m_groundMask:
     serializedVersion: 2
     m_Bits: 8
+  m_colliderObjectsMask:
+    serializedVersion: 2
+    m_Bits: 64
 --- !u!136 &1193676774
 CapsuleCollider:
   m_ObjectHideFlags: 8
@@ -1115,7 +1118,7 @@ GameObject:
   - component: {fileID: 1631306838}
   - component: {fileID: 1631306837}
   - component: {fileID: 1631306836}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Box (4)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1244,7 +1247,7 @@ GameObject:
   - component: {fileID: 1898713113}
   - component: {fileID: 1898713112}
   - component: {fileID: 1898713111}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Box
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1434,7 +1437,7 @@ GameObject:
   - component: {fileID: 2081740570}
   - component: {fileID: 2081740569}
   - component: {fileID: 2081740568}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Pole
   m_TagString: Untagged
   m_Icon: {fileID: 0}
