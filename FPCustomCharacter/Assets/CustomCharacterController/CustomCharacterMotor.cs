@@ -53,6 +53,30 @@ public class CustomCharacterMotor : MonoBehaviour
     private fp3 m_internalRightVector = new fp3(0,0,0);
     #endregion
 
+    #region Debug Methods
+    /// <summary>
+    /// Callback to draw gizmos that are pickable and always drawn.
+    /// </summary>
+    Vector3 debugGroundCheckPoint = new Vector3(0,0,0);
+    void OnDrawGizmos()
+    {
+        if(EditorApplication.isPlaying)
+        {
+            Gizmos.DrawSphere(debugGroundCheckPoint, m_capusleRadius);
+        }
+    }
+
+    string currentHitGround = "";
+    void OnGUI()
+    {
+        if(m_isGrounded)
+        {
+            GUI.color = Color.green;
+            GUI.Label(new Rect(0, 0, 200, 70), "Ground:" + currentHitGround);
+        }
+    }
+    #endregion
+
     void OnValidate()
     {
         CapsuleCollider collider = GetComponent<CapsuleCollider>();
@@ -75,7 +99,7 @@ public class CustomCharacterMotor : MonoBehaviour
 
     void CacheVariables()
     {
-        m_checkDistanceGround = (m_capsuleHeight / 2f) - m_capusleRadius + m_skinWidth; 
+        m_checkDistanceGround = ((m_capsuleHeight / 2f) - m_capusleRadius) + m_skinWidth; 
         m_fpFixedDeltaTime = (fp) Time.fixedDeltaTime;
         m_fpRotationSpeed = (fp) m_playerRotationSpeed;
         m_fpWallFraction = (fp) m_wallFraction;
@@ -103,16 +127,19 @@ public class CustomCharacterMotor : MonoBehaviour
 
     void CheckForGround() // TODO, investigate bug when walking off slopes it fails
     {
-        // Using half radius so the player can not stand on edges
+        debugGroundCheckPoint = transform.localPosition + Vector3.down * (m_checkDistanceGround);
+        // SphereCast
         bool hitFound = Physics.SphereCast(transform.localPosition, m_capusleRadius, Vector3.down, out RaycastHit sphereCastHit , m_checkDistanceGround, m_groundMask);
-        m_isGrounded = hitFound; 
-        if(hitFound) // TODO check for max slope angle
+        // SphereOverlap and check for collisions
+        if(hitFound && sphereCastHit.distance < m_checkDistanceGround) // TODO check for max slope angle
         {
-            // TODO set ground vector to normalize to
-            m_internalGroundNormal = new fp3((fp) sphereCastHit.normal.x, (fp) sphereCastHit.normal.y, (fp) sphereCastHit.normal.z);
+            m_isGrounded = true; 
+            m_internalGroundNormal = Vector3ToFixedVector(sphereCastHit.normal);
+            currentHitGround = sphereCastHit.transform.name;
         }
         else
         {
+            m_isGrounded = false;
             m_internalGroundNormal = new fp3(0,0,0);
         }
     }
@@ -177,24 +204,23 @@ public class CustomCharacterMotor : MonoBehaviour
         fp3 rightVector = fpmath.cross(FpUpVector, forwardVector); // TODO no need to calc if no right/left input
 
         desiredDirection = (fixedDirection.x * rightVector) + (fixedDirection.y * forwardVector);
+        desiredDirection = ProjectVectorOntoPlane(desiredDirection, m_internalGroundNormal); // Project onto ground, to move parrelel to ground
 
         // if there's wall slide along it 
-        Vector3 desiredNextPositionRelative = (direction.y * transform.forward) + (direction.x * transform.right);
         float distanceOfMovement = Time.fixedDeltaTime * m_playerWalkSpeed * (m_capusleRadius * 2); // TODO move out speed to Controller
-        bool canMoveInDir = CanMoveInDirection(desiredNextPositionRelative, distanceOfMovement, out Vector3 wallNormal);
+        bool canMoveInDir = CanMoveInDirection(FixedVector3ToVector3(desiredDirection), distanceOfMovement, out Vector3 wallNormal);
 
         if (!canMoveInDir)
         {
-            desiredDirection = ProjectVectorOntoPlane(desiredDirection, new fp3((fp)wallNormal.x, (fp)wallNormal.y, (fp)wallNormal.z));
-            desiredNextPositionRelative = new Vector3((float) desiredDirection.x,(float) desiredDirection.y, (float) desiredDirection.z);
-            if(!CanMoveInDirection(desiredNextPositionRelative, distanceOfMovement * m_wallFraction, out Vector3 dummyWallNormal))
+            desiredDirection = ProjectVectorOntoPlane(desiredDirection, new fp3((fp) wallNormal.x, (fp) wallNormal.y, (fp) wallNormal.z));
+            Debug.Log("Trying to walk against wall");
+            if(!CanMoveInDirection(FixedVector3ToVector3(desiredDirection), distanceOfMovement * m_wallFraction, out Vector3 dummyWallNormal))
             {
+                Debug.Log("Can't move.");
                 return;
             }
         }
 
-        // Project onto ground, to move parrelel to ground
-        desiredDirection = ProjectVectorOntoPlane(desiredDirection, m_internalGroundNormal);
         fp speed = m_fpFixedDeltaTime * m_fpWalkSpeed * (canMoveInDir ?  fp.one : m_fpWallFraction);
         m_internalPosition += (desiredDirection * speed);
     }
@@ -220,7 +246,7 @@ public class CustomCharacterMotor : MonoBehaviour
     #endregion
 
     #region Helpers // TODO seperate
-    fp3 ProjectVectorOntoPlane(fp3 vector, fp3 planeNormal)
+    public fp3 ProjectVectorOntoPlane(fp3 vector, fp3 planeNormal)
     {
         // Formula: ( (v * w) / w^2 ) * w
         if(VectorSqrMagn(vector) < (fp) 0.001f)
@@ -237,9 +263,19 @@ public class CustomCharacterMotor : MonoBehaviour
         return normalizedVector - projection;
     }
 
-    fp VectorSqrMagn(fp3 vector)
+    public fp VectorSqrMagn(fp3 vector)
     {
         return (vector.x * vector.x + vector.y * vector.y + vector.z * vector.z);
+    }
+
+    public Vector3 FixedVector3ToVector3(fp3 vector)
+    {
+        return new Vector3((float) vector.x, (float) vector.y,(float) vector.z);
+    }
+
+    public fp3 Vector3ToFixedVector(Vector3 vector)
+    {
+        return new fp3((fp) vector.x, (fp) vector.y, (fp) vector.z);
     }
     #endregion
 }
