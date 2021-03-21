@@ -35,6 +35,7 @@ public class CustomCharacterMotor : MonoBehaviour
     private fp m_fpWalkSpeed;
     private fp m_fpRotationSpeed;
     private fp m_fpWallFraction;
+    private fp m_fpGravityForce;
     private float m_checkDistanceGround;
     #endregion
 
@@ -47,7 +48,9 @@ public class CustomCharacterMotor : MonoBehaviour
     public readonly static fp Internal2Radian = (fp) 0.0174532924f;
     public readonly static fp3 FpUpVector = new fp3(0,1,0);
     private fp m_internalAngle = new fp(0);
-    private fp3 m_internalPosition = new fp3(0, 2, 0);
+    private fp3 m_internalVelocity = new fp3(0,0,0);
+    private fp3 m_internalGravityForce = new fp3(0,0,0);
+    private fp3 m_internalPosition = new fp3(0, 0, 0);
     private fp3 m_internalGroundNormal = new fp3(0,0,0);
     private fp3 m_internalForwardVector = new fp3(0,0,0);
     private fp3 m_internalRightVector = new fp3(0,0,0);
@@ -104,6 +107,7 @@ public class CustomCharacterMotor : MonoBehaviour
         m_fpRotationSpeed = (fp) m_playerRotationSpeed;
         m_fpWallFraction = (fp) m_wallFraction;
         m_fpWalkSpeed = (fp) m_playerWalkSpeed;
+        m_fpGravityForce = (fp) m_gravityForce;
     }
 
     void Update() // TODO // Used for debugging
@@ -123,6 +127,7 @@ public class CustomCharacterMotor : MonoBehaviour
         CheckForGround();
         ApplyGravity();
         ApplyTransform();
+        ClearState();
     }
 
     void CheckForGround() // TODO, investigate bug when walking off slopes it fails
@@ -133,8 +138,9 @@ public class CustomCharacterMotor : MonoBehaviour
         // SphereOverlap and check for collisions
         if(hitFound && sphereCastHit.distance < m_checkDistanceGround) // TODO check for max slope angle
         {
-            m_isGrounded = true; 
             m_internalGroundNormal = Vector3ToFixedVector(sphereCastHit.normal);
+            m_internalGravityForce = new fp3(0,0,0);
+            m_isGrounded = true; 
             currentHitGround = sphereCastHit.transform.name;
         }
         else
@@ -148,7 +154,7 @@ public class CustomCharacterMotor : MonoBehaviour
     {
         if(!m_isGrounded)
         {
-            m_internalPosition += new fp3(0, (fp) m_gravityForce * m_fpFixedDeltaTime, 0); // TODO use proper gravity equation, TODO cache Gravity force into fp, TODO proper add gravity velocity and add it at the end
+            m_internalGravityForce += new fp3(0, (m_fpGravityForce) * (m_fpFixedDeltaTime * m_fpFixedDeltaTime), 0);
         }
     }
 
@@ -159,8 +165,14 @@ public class CustomCharacterMotor : MonoBehaviour
 
     private void ApplyTransform()
     {
+        m_internalPosition += m_internalVelocity + m_internalGravityForce;
         transform.localEulerAngles = new Vector3(transform.localEulerAngles.x, InternalAngleRead, transform.localEulerAngles.z );
         transform.localPosition = new Vector3((float) m_internalPosition.x, (float) m_internalPosition.y, (float) m_internalPosition.z);
+    }
+
+    private void ClearState()
+    {
+        m_internalVelocity = new fp3(0,0,0);
     }
 
     private bool CanMoveInDirection(Vector3 direction, float distance, out Vector3 wallNormal) 
@@ -181,8 +193,7 @@ public class CustomCharacterMotor : MonoBehaviour
 
     #region Api
     /// <summary>
-    /// Moves relative to the player's transform
-    ///, doesn't apply gravity
+    /// Moves relative to the player's transform,  doesn't apply gravity
     /// </summary>
     public void Move(Vector2 direction)
     {
@@ -190,7 +201,7 @@ public class CustomCharacterMotor : MonoBehaviour
         if(direction.sqrMagnitude <= Mathf.Epsilon) // Zero Input
             return;
 
-        fp2 fixedDirection = new fp2((fp)direction.x, (fp)direction.y);
+        fp2 fixedDirection = new fp2( (fp) direction.x, (fp) direction.y);
         fp3 desiredDirection = new fp3(0, 0, 0);
 
         fpmath.normalize(fixedDirection);
@@ -222,7 +233,7 @@ public class CustomCharacterMotor : MonoBehaviour
         }
 
         fp speed = m_fpFixedDeltaTime * m_fpWalkSpeed * (canMoveInDir ?  fp.one : m_fpWallFraction);
-        m_internalPosition += (desiredDirection * speed);
+        m_internalVelocity += (desiredDirection * speed);
     }
 
     ///<summary>
