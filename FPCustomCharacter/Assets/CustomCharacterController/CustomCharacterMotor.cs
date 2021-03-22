@@ -51,7 +51,6 @@ public class CustomCharacterMotor : MonoBehaviour
     private fp3 m_internalVelocity = new fp3(0,0,0);
     private fp3 m_internalGravityForce = new fp3(0,0,0);
     private fp3 m_internalPosition = new fp3(0, 0, 0);
-    private fp3 m_internalGroundNormal = new fp3(0,0,0);
     private fp3 m_internalForwardVector = new fp3(0,0,0);
     private fp3 m_internalRightVector = new fp3(0,0,0);
     #endregion
@@ -61,21 +60,26 @@ public class CustomCharacterMotor : MonoBehaviour
     /// Callback to draw gizmos that are pickable and always drawn.
     /// </summary>
     Vector3 debugGroundCheckPoint = new Vector3(0,0,0);
+    Vector3 debugRayPoint = Vector3.zero;
     void OnDrawGizmos()
     {
         if(EditorApplication.isPlaying)
         {
             Gizmos.DrawSphere(debugGroundCheckPoint, m_capusleRadius);
+            Gizmos.DrawRay(debugRayPoint, Vector3.down);
         }
     }
 
-    string currentHitGround = "";
+    string debugCurrentHitGround = "";
+    string debugCurrentHitNormal = "";
     void OnGUI()
     {
         if(m_isGrounded)
         {
             GUI.color = Color.green;
-            GUI.Label(new Rect(0, 0, 200, 70), "Ground:" + currentHitGround);
+            GUI.Label(new Rect(0, 0, 200, 70), "Ground:" + debugCurrentHitGround);
+            GUI.color = Color.red;
+            GUI.Label(new Rect(0, 80, 200, 70), "Ground Normal:" + debugCurrentHitNormal);
         }
     }
     #endregion
@@ -124,9 +128,9 @@ public class CustomCharacterMotor : MonoBehaviour
     /// </summary>
     void FixedUpdate()
     {
-        CheckForGround();
         ApplyGravity();
         ApplyTransform();
+        CheckForGround();
         ClearState();
     }
 
@@ -138,16 +142,69 @@ public class CustomCharacterMotor : MonoBehaviour
         // SphereOverlap and check for collisions
         if(hitFound && sphereCastHit.distance < m_checkDistanceGround) // TODO check for max slope angle
         {
-            m_internalGroundNormal = Vector3ToFixedVector(sphereCastHit.normal);
-            m_internalGravityForce = new fp3(0,0,0);
-            m_isGrounded = true; 
-            currentHitGround = sphereCastHit.transform.name;
+            // if there's a hit found, sweep for the correct ground
+            Collider[] hitList = new Collider[5];
+            int num = Physics.OverlapSphereNonAlloc(sphereCastHit.point, m_capusleRadius, hitList, m_groundMask);
+            Vector3 currentNormal = Vector3.zero;
+            int validHitIndex = -1;
+            if(num > 0)
+            {
+                float maxDistance = Mathf.Infinity;
+                for(int i = 0; i < num; ++i)
+                {
+                    debugRayPoint = transform.localPosition;
+                    if(hitList[i].Raycast(new Ray(transform.localPosition, Vector3.down), out RaycastHit info, 2f))
+                    {
+                        if(info.distance < maxDistance)
+                        {
+                            maxDistance = info.distance;
+                            currentNormal = info.normal;
+                            validHitIndex = i;
+                        }
+                    }
+                }
+            }
+
+            if (validHitIndex != -1)
+            {
+                // if valid hit is found 
+                m_internalGravityForce = new fp3(0, 0, 0);
+                m_isGrounded = true;
+                debugCurrentHitGround = sphereCastHit.transform.name;
+            }
         }
         else
         {
             m_isGrounded = false;
-            m_internalGroundNormal = new fp3(0,0,0);
         }
+    }
+    private fp3 SweepForGroundNormal(fp3 direction)
+    {
+        fp3 groundNormal  = new fp3(0,0,0);
+        Vector3 rayPoint = transform.localPosition + FixedVector3ToVector3(direction);
+        debugRayPoint = rayPoint;
+        Ray ray = new Ray(rayPoint, Vector3.down);
+        RaycastHit[] hitList = new RaycastHit[3];
+        int raycast = Physics.RaycastNonAlloc(ray, hitList, 2f, m_groundMask); // TODO use Sphere/Capsule cast
+        float capsuleDistance = m_capsuleHeight / 2 + (m_capusleRadius);
+        if(raycast > 0)
+        {
+            float maxDistance = Mathf.Infinity;
+            int indexOfValidHit = -1;
+            for(int i = 0; i < raycast; i++)
+            {
+                if(hitList[i].distance < maxDistance)
+                {
+                    indexOfValidHit = i;
+                }
+            }
+            if(indexOfValidHit != -1)
+            {
+                groundNormal = Vector3ToFixedVector(hitList[indexOfValidHit].normal);
+                debugCurrentHitNormal = hitList[indexOfValidHit].transform.name;
+            }
+        }
+        return groundNormal;
     }
 
     private void ApplyGravity() 
@@ -180,7 +237,6 @@ public class CustomCharacterMotor : MonoBehaviour
         float circleOffset = (m_capsuleHeight / 2) - m_capusleRadius;
         Vector3 topPoint = transform.position + Vector3.up * circleOffset;
         Vector3 bottomPoint = transform.position - Vector3.up * circleOffset;
-        // TODO, cast at the edge of the capsule instead of the center
         bool hitFound = Physics.CapsuleCast(topPoint, bottomPoint, m_capusleRadius, direction, out RaycastHit hitInfo, 5f, m_colliderObjectsMask);
         if(hitFound && hitInfo.distance < distance + m_skinWidth)
         {
@@ -215,7 +271,8 @@ public class CustomCharacterMotor : MonoBehaviour
         fp3 rightVector = fpmath.cross(FpUpVector, forwardVector); // TODO no need to calc if no right/left input
 
         desiredDirection = (fixedDirection.x * rightVector) + (fixedDirection.y * forwardVector);
-        desiredDirection = ProjectVectorOntoPlane(desiredDirection, m_internalGroundNormal); // Project onto ground, to move parrelel to ground
+        fp3 groundNormal = SweepForGroundNormal(desiredDirection * m_fpFixedDeltaTime);
+        desiredDirection = ProjectVectorOntoPlane(desiredDirection, groundNormal); // Project onto ground, to move parrelel to ground
 
         // if there's wall slide along it 
         float distanceOfMovement = Time.fixedDeltaTime * m_playerWalkSpeed * (m_capusleRadius * 2); // TODO move out speed to Controller
