@@ -26,8 +26,10 @@ public class CustomCharacterMotor : MonoBehaviour
     [SerializeField] private float m_capusleRadius = 0.5f;
     [SerializeField] private float m_capsuleHeight = 2;
     [SerializeField] private float m_skinWidth = 0.08f;
+    [SerializeField] private float m_maxSlopeAngle= 45;
     [SerializeField] private LayerMask m_groundMask;
     [SerializeField] private LayerMask m_colliderObjectsMask;
+    [SerializeField] private LayerMask m_excludePlayer;
     #endregion
 
     #region Cached Variables
@@ -48,7 +50,8 @@ public class CustomCharacterMotor : MonoBehaviour
     public readonly static fp Internal2Radian = (fp) 0.0174532924f;
     public readonly static fp3 FpUpVector = new fp3(0,1,0);
     private fp m_internalAngle = new fp(0);
-    private fp3 m_internalVelocity = new fp3(0,0,0);
+    private fp2 m_internalInput = new fp2(0,0);
+    private fp3 m_internalVelocity = new fp3(0, 0,0);
     private fp3 m_internalGravityForce = new fp3(0,0,0);
     private fp3 m_internalPosition = new fp3(0, 0, 0);
     private fp3 m_internalForwardVector = new fp3(0,0,0);
@@ -61,11 +64,15 @@ public class CustomCharacterMotor : MonoBehaviour
     /// </summary>
     Vector3 debugGroundCheckPoint = new Vector3(0,0,0);
     Vector3 debugRayPoint = Vector3.zero;
+    Vector3 debugTopPoint = Vector3.zero;
+    Vector3 debugBottomPoint = Vector3.zero;
     void OnDrawGizmos()
     {
         if(EditorApplication.isPlaying)
         {
-            Gizmos.DrawSphere(debugGroundCheckPoint, m_capusleRadius);
+            //Gizmos.DrawSphere(debugGroundCheckPoint, m_capusleRadius);
+            Gizmos.DrawSphere(debugTopPoint, m_capusleRadius);
+            Gizmos.DrawSphere(debugBottomPoint, m_capusleRadius);
             Gizmos.DrawRay(debugRayPoint, Vector3.down);
         }
     }
@@ -128,9 +135,11 @@ public class CustomCharacterMotor : MonoBehaviour
     /// </summary>
     void FixedUpdate()
     {
-        ApplyGravity();
-        ApplyTransform();
         CheckForGround();
+        ApplyGravity();
+        ComputeTransform();
+        TryMove(m_internalInput);
+        ApplyTransform();
         ClearState();
     }
 
@@ -181,26 +190,31 @@ public class CustomCharacterMotor : MonoBehaviour
     private fp3 SweepForGroundNormal(fp3 direction)
     {
         fp3 groundNormal  = new fp3(0,0,0);
-        Vector3 rayPoint = transform.localPosition + FixedVector3ToVector3(direction);
+        Vector3 rayPoint = transform.localPosition + (Vector3.up * m_capsuleHeight / 2) + FixedVector3ToVector3(direction);
         debugRayPoint = rayPoint;
         Ray ray = new Ray(rayPoint, Vector3.down);
-        RaycastHit[] hitList = new RaycastHit[3];
-        int raycast = Physics.RaycastNonAlloc(ray, hitList, 2f, m_groundMask); // TODO use Sphere/Capsule cast
+        bool raycastHit = Physics.Raycast(ray, out RaycastHit rayHitInfo , 4f);
+        Collider[] hitList = new Collider[5];
+        int raycast = Physics.OverlapSphereNonAlloc(rayHitInfo.point, m_capusleRadius,  hitList, m_groundMask); // TODO use Sphere/Capsule cast
         float capsuleDistance = m_capsuleHeight / 2 + (m_capusleRadius);
         if(raycast > 0)
         {
             float maxDistance = Mathf.Infinity;
             int indexOfValidHit = -1;
+
             for(int i = 0; i < raycast; i++)
             {
-                if(hitList[i].distance < maxDistance)
+                if (hitList[i].Raycast(new Ray(transform.localPosition, Vector3.down), out RaycastHit hitInfo, m_groundMask))
                 {
-                    indexOfValidHit = i;
+                    if (hitInfo.distance < maxDistance)
+                    {
+                        indexOfValidHit = i;
+                        groundNormal = Vector3ToFixedVector(hitInfo.normal);
+                    }
                 }
             }
             if(indexOfValidHit != -1)
             {
-                groundNormal = Vector3ToFixedVector(hitList[indexOfValidHit].normal);
                 debugCurrentHitNormal = hitList[indexOfValidHit].transform.name;
             }
         }
@@ -217,7 +231,12 @@ public class CustomCharacterMotor : MonoBehaviour
 
     private void ComputeTransform()
     {
-        // Compute internal forward and right vectors
+        fp angleInRad = m_internalAngle * Internal2Radian;
+        fp sinCoordinate = fpmath.sin(angleInRad);
+        fp cosCoordinate = fpmath.cos(angleInRad);
+
+        m_internalForwardVector = new fp3(sinCoordinate, 0, cosCoordinate);
+        m_internalRightVector = fpmath.cross(FpUpVector, m_internalForwardVector); // TODO no need to calc if no right/left input
     }
 
     private void ApplyTransform()
@@ -229,15 +248,18 @@ public class CustomCharacterMotor : MonoBehaviour
 
     private void ClearState()
     {
+        m_internalInput = new fp2(0,0);
         m_internalVelocity = new fp3(0,0,0);
     }
 
     private bool CanMoveInDirection(Vector3 direction, float distance, out Vector3 wallNormal) 
     {
         float circleOffset = (m_capsuleHeight / 2) - m_capusleRadius;
-        Vector3 topPoint = transform.position + Vector3.up * circleOffset;
-        Vector3 bottomPoint = transform.position - Vector3.up * circleOffset;
-        bool hitFound = Physics.CapsuleCast(topPoint, bottomPoint, m_capusleRadius, direction, out RaycastHit hitInfo, 5f, m_colliderObjectsMask);
+        Vector3 topPoint = transform.localPosition + Vector3.up * circleOffset;
+        debugTopPoint = topPoint;
+        Vector3 bottomPoint = transform.localPosition - Vector3.up * circleOffset;
+        debugBottomPoint = bottomPoint;
+        bool hitFound = Physics.CapsuleCast(topPoint, bottomPoint, m_capusleRadius, direction, out RaycastHit hitInfo, 5f, m_excludePlayer);
         if(hitFound && hitInfo.distance < distance + m_skinWidth)
         {
             wallNormal = hitInfo.normal;
@@ -245,6 +267,39 @@ public class CustomCharacterMotor : MonoBehaviour
         }
         wallNormal = Vector3.zero;
         return true;
+    }
+
+    private void TryMove(fp2 direction)
+    {
+        if(FpVector2SqrMagn(direction) <= (fp)0.01)
+            return;
+
+        fp2 fixedDirection = new fp2((fp)direction.x, (fp)direction.y);
+        fp3 desiredDirection = new fp3(0, 0, 0);
+
+        fixedDirection = fpmath.normalize(fixedDirection);
+
+        desiredDirection = (fixedDirection.x * m_internalRightVector) + (fixedDirection.y * m_internalForwardVector);
+        fp3 groundNormal = SweepForGroundNormal(desiredDirection * m_fpFixedDeltaTime); 
+        desiredDirection = ProjectVectorOntoPlane(desiredDirection, groundNormal); // Project onto ground, to move parrelel to ground
+
+        // if there's wall slide along it 
+        float distanceOfMovement = Time.fixedDeltaTime * m_playerWalkSpeed; // TODO move out speed to Controller
+        bool canMoveInDir = CanMoveInDirection(FixedVector3ToVector3(desiredDirection), distanceOfMovement, out Vector3 wallNormal);
+
+        if (!canMoveInDir)
+        {
+            desiredDirection = ProjectVectorOntoPlane(desiredDirection, new fp3((fp)wallNormal.x, (fp)wallNormal.y, (fp)wallNormal.z));
+            Debug.Log("Trying to walk against wall");
+            if (!CanMoveInDirection(FixedVector3ToVector3(desiredDirection), distanceOfMovement * m_wallFraction, out Vector3 dummyWallNormal))
+            {
+                Debug.Log("Can't move.");
+                return;
+            }
+        }
+
+        fp speed = m_fpFixedDeltaTime * m_fpWalkSpeed * (canMoveInDir ?  fp.one : m_fpWallFraction);
+        m_internalVelocity += (desiredDirection) * speed;
     }
 
     #region Api
@@ -257,40 +312,7 @@ public class CustomCharacterMotor : MonoBehaviour
         if(direction.sqrMagnitude <= Mathf.Epsilon) // Zero Input
             return;
 
-        fp2 fixedDirection = new fp2( (fp) direction.x, (fp) direction.y);
-        fp3 desiredDirection = new fp3(0, 0, 0);
-
-        fpmath.normalize(fixedDirection);
-
-        // Calculate forward direction
-        fp angleInRad = m_internalAngle * Internal2Radian;
-        fp sinCoordinate = fpmath.sin(angleInRad);
-        fp cosCoordinate = fpmath.cos(angleInRad);
-
-        fp3 forwardVector = new fp3(sinCoordinate, 0, cosCoordinate);
-        fp3 rightVector = fpmath.cross(FpUpVector, forwardVector); // TODO no need to calc if no right/left input
-
-        desiredDirection = (fixedDirection.x * rightVector) + (fixedDirection.y * forwardVector);
-        fp3 groundNormal = SweepForGroundNormal(desiredDirection * m_fpFixedDeltaTime);
-        desiredDirection = ProjectVectorOntoPlane(desiredDirection, groundNormal); // Project onto ground, to move parrelel to ground
-
-        // if there's wall slide along it 
-        float distanceOfMovement = Time.fixedDeltaTime * m_playerWalkSpeed * (m_capusleRadius * 2); // TODO move out speed to Controller
-        bool canMoveInDir = CanMoveInDirection(FixedVector3ToVector3(desiredDirection), distanceOfMovement, out Vector3 wallNormal);
-
-        if (!canMoveInDir)
-        {
-            desiredDirection = ProjectVectorOntoPlane(desiredDirection, new fp3((fp) wallNormal.x, (fp) wallNormal.y, (fp) wallNormal.z));
-            Debug.Log("Trying to walk against wall");
-            if(!CanMoveInDirection(FixedVector3ToVector3(desiredDirection), distanceOfMovement * m_wallFraction, out Vector3 dummyWallNormal))
-            {
-                Debug.Log("Can't move.");
-                return;
-            }
-        }
-
-        fp speed = m_fpFixedDeltaTime * m_fpWalkSpeed * (canMoveInDir ?  fp.one : m_fpWallFraction);
-        m_internalVelocity += (desiredDirection * speed);
+        m_internalInput += (new fp2((fp)direction.x, (fp) direction.y));
     }
 
     ///<summary>
@@ -317,7 +339,7 @@ public class CustomCharacterMotor : MonoBehaviour
     public fp3 ProjectVectorOntoPlane(fp3 vector, fp3 planeNormal)
     {
         // Formula: ( (v * w) / w^2 ) * w
-        if(VectorSqrMagn(vector) < (fp) 0.001f)
+        if(FpVector3SqrMagn(vector) < (fp) 0.001f)
         {
             return vector;
         }
@@ -325,15 +347,20 @@ public class CustomCharacterMotor : MonoBehaviour
         fp dot = fpmath.dot(normalizedVector, planeNormal);
         if(dot == 0) return vector; // If orthogonal
 
-        fp normalMagnitude = fpmath.rsqrt( VectorSqrMagn(vector) );
+        fp normalMagnitude = fpmath.rsqrt( FpVector3SqrMagn(vector) );
         fp3 projection = ((dot) / normalMagnitude * normalMagnitude) * planeNormal;
 
         return normalizedVector - projection;
     }
 
-    public fp VectorSqrMagn(fp3 vector)
+    public fp FpVector3SqrMagn(fp3 vector)
     {
         return (vector.x * vector.x + vector.y * vector.y + vector.z * vector.z);
+    }
+    
+    public fp FpVector2SqrMagn(fp2 vector)
+    {
+        return (vector.x * vector.x + vector.y * vector.y);
     }
 
     public Vector3 FixedVector3ToVector3(fp3 vector)
