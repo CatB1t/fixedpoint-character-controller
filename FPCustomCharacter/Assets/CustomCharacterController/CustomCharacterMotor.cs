@@ -190,7 +190,7 @@ public class CustomCharacterMotor : MonoBehaviour
     private fp3 SweepForGroundNormal(fp3 direction)
     {
         fp3 groundNormal  = new fp3(0,0,0);
-        Vector3 rayPoint = transform.localPosition + (Vector3.up * m_capsuleHeight / 2) + FixedVector3ToVector3(direction);
+        Vector3 rayPoint = transform.localPosition + (Vector3.up * m_capsuleHeight / 2) + FixedPointVector.ToVector(direction);
         debugRayPoint = rayPoint;
         Ray ray = new Ray(rayPoint, Vector3.down);
         bool raycastHit = Physics.Raycast(ray, out RaycastHit rayHitInfo , 4f);
@@ -209,7 +209,7 @@ public class CustomCharacterMotor : MonoBehaviour
                     if (hitInfo.distance < maxDistance)
                     {
                         indexOfValidHit = i;
-                        groundNormal = Vector3ToFixedVector(hitInfo.normal);
+                        groundNormal = FixedPointVector.ToFixedVector(hitInfo.normal);
                     }
                 }
             }
@@ -243,7 +243,7 @@ public class CustomCharacterMotor : MonoBehaviour
     {
         m_internalPosition += m_internalVelocity + m_internalGravityForce;
         transform.localEulerAngles = new Vector3(transform.localEulerAngles.x, InternalAngleRead, transform.localEulerAngles.z );
-        transform.localPosition = new Vector3((float) m_internalPosition.x, (float) m_internalPosition.y, (float) m_internalPosition.z);
+        transform.localPosition = FixedPointVector.ToVector(m_internalPosition);
     }
 
     private void ClearState()
@@ -271,27 +271,26 @@ public class CustomCharacterMotor : MonoBehaviour
 
     private void TryMove(fp2 direction)
     {
-        if(FpVector2SqrMagn(direction) <= (fp)0.01)
+        if(FixedPointVector.SqrMagn(direction) <= (fp)0.01)
             return;
 
-        fp2 fixedDirection = new fp2((fp)direction.x, (fp)direction.y);
         fp3 desiredDirection = new fp3(0, 0, 0);
 
-        fixedDirection = fpmath.normalize(fixedDirection);
+        direction = fpmath.normalize(direction);
 
-        desiredDirection = (fixedDirection.x * m_internalRightVector) + (fixedDirection.y * m_internalForwardVector);
+        desiredDirection = (direction.x * m_internalRightVector) + (direction.y * m_internalForwardVector);
         fp3 groundNormal = SweepForGroundNormal(desiredDirection * m_fpFixedDeltaTime); 
-        desiredDirection = ProjectVectorOntoPlane(desiredDirection, groundNormal); // Project onto ground, to move parrelel to ground
+        desiredDirection = FixedPointVector.ProjectVectorOntoPlane(desiredDirection, groundNormal); // Project onto ground, to move parrelel to ground
 
         // if there's wall slide along it 
         float distanceOfMovement = Time.fixedDeltaTime * m_playerWalkSpeed; // TODO move out speed to Controller
-        bool canMoveInDir = CanMoveInDirection(FixedVector3ToVector3(desiredDirection), distanceOfMovement, out Vector3 wallNormal);
+        bool canMoveInDir = CanMoveInDirection(FixedPointVector.ToVector(desiredDirection), distanceOfMovement, out Vector3 wallNormal);
 
         if (!canMoveInDir)
         {
-            desiredDirection = ProjectVectorOntoPlane(desiredDirection, new fp3((fp)wallNormal.x, (fp)wallNormal.y, (fp)wallNormal.z));
+            desiredDirection = FixedPointVector.ProjectVectorOntoPlane(desiredDirection, FixedPointVector.ToFixedVector(wallNormal));
             Debug.Log("Trying to walk against wall");
-            if (!CanMoveInDirection(FixedVector3ToVector3(desiredDirection), distanceOfMovement * m_wallFraction, out Vector3 dummyWallNormal))
+            if (!CanMoveInDirection(FixedPointVector.ToVector(desiredDirection), distanceOfMovement * m_wallFraction, out Vector3 dummyWallNormal))
             {
                 Debug.Log("Can't move.");
                 return;
@@ -312,7 +311,7 @@ public class CustomCharacterMotor : MonoBehaviour
         if(direction.sqrMagnitude <= Mathf.Epsilon) // Zero Input
             return;
 
-        m_internalInput += (new fp2((fp)direction.x, (fp) direction.y));
+        m_internalInput += FixedPointVector.ToFixedVector(direction);
     }
 
     ///<summary>
@@ -335,42 +334,4 @@ public class CustomCharacterMotor : MonoBehaviour
     }
     #endregion
 
-    #region Helpers // TODO seperate
-    public fp3 ProjectVectorOntoPlane(fp3 vector, fp3 planeNormal)
-    {
-        // Formula: ( (v * w) / w^2 ) * w
-        if(FpVector3SqrMagn(vector) < (fp) 0.001f)
-        {
-            return vector;
-        }
-        fp3 normalizedVector = fpmath.normalize(vector);
-        fp dot = fpmath.dot(normalizedVector, planeNormal);
-        if(dot == 0) return vector; // If orthogonal
-
-        fp normalMagnitude = fpmath.rsqrt( FpVector3SqrMagn(vector) );
-        fp3 projection = ((dot) / normalMagnitude * normalMagnitude) * planeNormal;
-
-        return normalizedVector - projection;
-    }
-
-    public fp FpVector3SqrMagn(fp3 vector)
-    {
-        return (vector.x * vector.x + vector.y * vector.y + vector.z * vector.z);
-    }
-    
-    public fp FpVector2SqrMagn(fp2 vector)
-    {
-        return (vector.x * vector.x + vector.y * vector.y);
-    }
-
-    public Vector3 FixedVector3ToVector3(fp3 vector)
-    {
-        return new Vector3((float) vector.x, (float) vector.y,(float) vector.z);
-    }
-
-    public fp3 Vector3ToFixedVector(Vector3 vector)
-    {
-        return new fp3((fp) vector.x, (fp) vector.y, (fp) vector.z);
-    }
-    #endregion
 }
